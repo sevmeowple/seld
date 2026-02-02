@@ -1,0 +1,35 @@
+[model]
+in_channel = 7
+in_dim = 64
+out_dim = 39
+att_context_size = [100,4]
+num_conformer_layers = 8
+encoder_dim = 256
+pre_train = false
+pre_train_model = "..."
+
+[data]
+train_lmdb_dir = "/disk7/zchan/Dataset/Dcase2023/feat_label/lmdb_foa_dev_split/train"
+test_lmdb_dir = "/disk7/zchan/Dataset/Dcase2023/feat_label/lmdb_foa_dev_split/dev"
+ref_files_dir = '/disk7/zchan/Dataset/Dcase2023/metadata_dev'
+norm_file = '/disk7/zchan/Dataset/Dcase2023/feat_label/foa_wts'
+segment_len = 100
+select_num = 10
+batch_size = 32
+train_ignore = "enh"
+test_ignore = "enh"
+
+[train]
+lr = 0.001
+train_num_workers = 8
+test_num_workers = 4
+nb_steps = 60000
+seed = 12332
+
+debug = false
+
+[result]
+log_output_path = "./logs/train.log"
+log_interval = 100
+checkpoint_output_dir = "./checkpoints"
+dcase_output_dir = "./dcase_output"
