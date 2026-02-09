@@ -206,24 +206,31 @@ class CausalAttention(nn.Module):
         dots = dots + pos_attn
 
         # 只在训练模式下应用chunk mask
-        if is_training:
-            chunk_size = self.att_context_size[1] + 1
-            left_chunks_num = self.att_context_size[0] // chunk_size if self.att_context_size[0] >= 0 else 0
+        # if is_training:
+        #     chunk_size = self.att_context_size[1] + 1
+        #     left_chunks_num = self.att_context_size[0] // chunk_size if self.att_context_size[0] >= 0 else 0
             
-            # 创建chunk mask
-            chunk_idx = torch.arange(0, n, dtype=torch.int, device=device)
-            chunk_idx = torch.div(chunk_idx, chunk_size, rounding_mode="trunc")
-            diff_chunks = chunk_idx.unsqueeze(1) - chunk_idx.unsqueeze(0)
-            chunked_limited_mask = torch.logical_and(
-                torch.le(diff_chunks, left_chunks_num),
-                torch.ge(diff_chunks, 0)
-            )
-            att_mask = torch.ones(1, n, n, dtype=torch.bool, device=device)
-            att_mask = torch.logical_and(att_mask, chunked_limited_mask.unsqueeze(0))
-            att_mask = att_mask.squeeze(0)
+        #     # 创建chunk mask
+        #     chunk_idx = torch.arange(0, n, dtype=torch.int, device=device)
+        #     chunk_idx = torch.div(chunk_idx, chunk_size, rounding_mode="trunc")
+        #     diff_chunks = chunk_idx.unsqueeze(1) - chunk_idx.unsqueeze(0)
+        #     chunked_limited_mask = torch.logical_and(
+        #         torch.le(diff_chunks, left_chunks_num),
+        #         torch.ge(diff_chunks, 0)
+        #     )
+        #     att_mask = torch.ones(1, n, n, dtype=torch.bool, device=device)
+        #     att_mask = torch.logical_and(att_mask, chunked_limited_mask.unsqueeze(0))
+        #     att_mask = att_mask.squeeze(0)
 
-            # 应用mask
-            dots.masked_fill_(~att_mask, float('-inf'))
+        #     # 应用mask
+        #     dots.masked_fill_(~att_mask, float('-inf'))
+        if mask is not None:
+            # 确保 mask 维度匹配。add_optional_chunk_mask 返回 (B, L, L) 或 (B, 1, L, L)
+            # dots 维度为 (B, H, L, L)
+            # 这里的 mask 应该是 True 表示保留，False 表示 mask 掉
+            # masked_fill_ 填充 ~mask (即 False 的部分)
+            dots.masked_fill_(~mask, float('-inf'))
+
 
         attn = dots.softmax(dim=-1)
         out = einsum('b h i j, b h j d -> b h i d', attn, v)

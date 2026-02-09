@@ -31,20 +31,6 @@ build-backend = "uv_build"
 module-name=["seld","config"]
 module-root = "src"
 
-
-[[tool.uv.index]]
-name = "pytorch-cu118"
-url = "https://download.pytorch.org/whl/cu118"
-explicit = true
-
-[tool.uv.sources]
-torch = [
-{index="pytorch-cu118"},
-]
-torchvision = [
-{index="pytorch-cu118"},
-]
-
 [dependency-groups]
 dev = [
     "grpcio-tools>=1.76.0",
@@ -57,3 +43,18 @@ dev = [
 feature_extraction = "uv run src/seld/utils/feature/feature_extraction.py"
 # feature 从npy格式到lmdb格式,参数文件:convert_lmdb本身
 feature_to_lmdb = "uv run src/seld/utils/lmdb_tools/convert_lmdb.py"
+# train:训练脚本
+train = "uv run src/seld/train/train_dynamic_chunk.py"
+
+[tool.uv.sources]
+torch = [
+{index="pytorch-cu118"},
+]
+torchvision = [
+{index="pytorch-cu118"},
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true

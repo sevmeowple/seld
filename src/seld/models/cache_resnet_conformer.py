@@ -10,6 +10,7 @@ from seld.models.components.resnet_conformer_audio import ResnetConformer_sed_do
 # from cache_resnet import resnet18_nopool
 # from cache_conformer import ConformerBlock
 import pdb
+from seld.models.components.mask import add_optional_chunk_mask
 
 class ResnetConformer_sed_doa_nopool(nn.Module):
     def __init__(self, in_channel, in_dim, out_dim, 
@@ -56,18 +57,88 @@ class ResnetConformer_sed_doa_nopool(nn.Module):
             nn.Linear(self.encoder_dim, out_dim),
             nn.Tanh()
         ) 
-    def forward(self, x, resnet_cache=None, conformer_cache=None):
+        
+    # def forward(self, x, resnet_cache=None, conformer_cache=None):
+    #     if resnet_cache is None and conformer_cache is None:
+    #     # if cache is None:
+    #         conv_outputs = self.resnet(x)
+    #         N, C, T, W = conv_outputs.shape
+    #         conv_outputs = conv_outputs.permute(0,2,1,3).reshape(N, T, C*W)
+            
+    #         conformer_outputs = self.input_projection(conv_outputs)
+            
+    #         # === 新增：生成 Optional Mask ===
+    #         # 1. 创建 padding mask (如果输入是固定长度或没有 padding 信息，全为 True)
+    #         # 如果你有真实的长度信息 lengths，应该使用 make_pad_mask(lengths)
+    #         masks = torch.ones(N, 1, T, dtype=torch.bool, device=conformer_outputs.device)
+            
+    #         # 2. 计算 chunk 参数 (沿用原有的 att_context_size 配置)
+    #         chunk_size = self.att_context_size[1] + 1
+    #         num_left_chunks = self.att_context_size[0] // chunk_size if chunk_size > 0 else -1
+            
+    #         # 3. 调用 add_optional_chunk_mask
+    #         # use_dynamic_chunk=True 开启随机动态 chunk 训练 (推荐用于增强鲁棒性)
+    #         # 如果想保持和原来完全一致的静态 chunk，设置 use_dynamic_chunk=False, static_chunk_size=chunk_size
+    #         chunk_mask = add_optional_chunk_mask(
+    #             conformer_outputs,
+    #             masks,
+    #             use_dynamic_chunk=True,  # 或 False，取决于你想是否要在训练中随机改变 chunk 大小
+    #             use_dynamic_left_chunk=True,
+    #             decoding_chunk_size=0,   # 0 表示训练时使用随机 chunk
+    #             static_chunk_size=chunk_size, 
+    #             num_decoding_left_chunks=num_left_chunks
+    #         )
+            
+    #         # 4. 调整维度以适配 Multi-head Attention: (B, L, L) -> (B, 1, L, L)
+    #         if chunk_mask is not None:
+    #             chunk_mask = chunk_mask.unsqueeze(1)
+            
+    #         for layer in self.conformer_layers:
+    #             conformer_outputs = layer(conformer_outputs)
+    def forward(self, x, resnet_cache=None, conformer_cache=None, decoding_chunk_size=None):
         if resnet_cache is None and conformer_cache is None:
-        # if cache is None:
+            # === 非流式模式 (训练 或 离线推理) ===
+            
             conv_outputs = self.resnet(x)
             N, C, T, W = conv_outputs.shape
             conv_outputs = conv_outputs.permute(0,2,1,3).reshape(N, T, C*W)
-            
             conformer_outputs = self.input_projection(conv_outputs)
             
+            # === 核心修改逻辑 ===
+            # 1. 确定 decoding_chunk_size
+            if decoding_chunk_size is None:
+                if self.training:
+                    # 训练模式：使用随机动态 Chunk (0)
+                    active_decoding_chunk_size = 0
+                else:
+                    # 推理模式：默认使用全上下文 (-1)，获得最佳性能
+                    # 如果你想在验证时模拟流式模型的固定延迟，这里可以改成 self.att_context_size[1] + 1
+                    active_decoding_chunk_size = -1 
+            else:
+                # 用户强行指定 (比如想测试特定延迟下的性能)
+                active_decoding_chunk_size = decoding_chunk_size
+
+            # 2. 生成 mask
+            masks = torch.ones(N, 1, T, dtype=torch.bool, device=conformer_outputs.device)
+            chunk_size = self.att_context_size[1] + 1
+            num_left_chunks = self.att_context_size[0] // chunk_size if chunk_size > 0 else -1
+
+            chunk_mask = add_optional_chunk_mask(
+                conformer_outputs,
+                masks,
+                use_dynamic_chunk=True,  # 必须开启这个才能让 active_decoding_chunk_size 生效
+                use_dynamic_left_chunk=True,
+                decoding_chunk_size=active_decoding_chunk_size, # 传入决定好的 size
+                static_chunk_size=chunk_size, 
+                num_decoding_left_chunks=num_left_chunks
+            )
+            
+            if chunk_mask is not None:
+                chunk_mask = chunk_mask.unsqueeze(1)
+            # ===================
+
             for layer in self.conformer_layers:
-                conformer_outputs = layer(conformer_outputs)
-                
+                conformer_outputs = layer(conformer_outputs, mask=chunk_mask)      
             outputs = conformer_outputs.permute(0,2,1)
             outputs = self.t_pooling(outputs)
             outputs = outputs.permute(0,2,1)
