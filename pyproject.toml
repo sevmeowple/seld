@@ -5,53 +5,55 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "torch==2.6.0",
-    "torchvision==0.21.0",
-    "torchaudio==2.6.0",
-    "pydantic>=2.12.5",
-    "tomli>=2.4.0",
-    "einops>=0.8.2",
-    "lmdb>=1.7.5",
-    "joblib>=1.5.3",
-    "protobuf>=6.33.5",
-    "tqdm>=4.67.2",
-    "scipy>=1.15.3",
-    "matplotlib>=3.10.8",
-    "librosa>=0.11.0",
-    "scikit-learn>=1.7.2",
+  "einops>=0.8.2",
+  "joblib>=1.5.3",
+  "librosa>=0.11.0",
+  "lmdb>=1.7.5",
+  "matplotlib>=3.10.8",
+  "protobuf>=6.33.5",
+  "pydantic>=2.12.5",
+  "scikit-learn>=1.7.2",
+  "scipy>=1.15.3",
+  "tomli>=2.4.0",
+  "torch==2.6.0",
+  "torchaudio==2.6.0",
+  "torchvision==0.21.0",
+  "tqdm>=4.67.2",
 ]
 # CUDA 11.8
 # pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu118
 
+[dependency-groups]
+dev = [
+  "grpcio-tools>=1.76.0",
+  "protobuf>=6.33.5",
+  "taskipy>=1.14.1",
+]
+
 [build-system]
 requires = ["uv_build>=0.9.28,<0.10.0"]
 build-backend = "uv_build"
-
-[tool.uv.build-backend]
-module-name=["seld","config"]
-module-root = "src"
-
-[dependency-groups]
-dev = [
-    "grpcio-tools>=1.76.0",
-    "protobuf>=6.33.5",
-    "taskipy>=1.14.1",
-]
 
 [tool.taskipy.tasks]
 # feature 提取,参数文件:parameter
 feature_extraction = "uv run src/seld/utils/feature/feature_extraction.py"
 # feature 从npy格式到lmdb格式,参数文件:convert_lmdb本身
 feature_to_lmdb = "uv run src/seld/utils/lmdb_tools/convert_lmdb.py"
+# test:测试脚本
+test = "uv run src/seld_v2/test/test_cache_model_streaming.py {args}"
 # train:训练脚本
 train = "uv run src/seld/train/train_dynamic_chunk.py"
 
+[tool.uv.build-backend]
+module-name = ["seld", "config", "seld_v2"]
+module-root = "src"
+
 [tool.uv.sources]
 torch = [
-{index="pytorch-cu118"},
+  { index = "pytorch-cu118" },
 ]
 torchvision = [
-{index="pytorch-cu118"},
+  { index = "pytorch-cu118" },
 ]
 
 [[tool.uv.index]]

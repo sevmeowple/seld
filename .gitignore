@@ -11,5 +11,10 @@ wheels/
 
 dcase_output/
 checkpoints/
+experiments/
 
 logs/
+
+.claude/
+CLAUDE.md
+

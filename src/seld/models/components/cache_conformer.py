@@ -171,17 +171,33 @@ class CausalAttention(nn.Module):
 
     def forward(self, x, mask=None, cache=None):
         # n, device, h = x.shape[-2], x.device, self.heads
-        
+
         # 区分训练和推理模式
         is_training = cache is None
-        
+
+        # 记录输入的长度，用于后续切片
+        input_len = x.shape[1]
+
         if not is_training:
             # 推理模式：使用cache
-            context = torch.cat([cache, x], dim=1) if cache is not None else x
+            full_context = torch.cat([cache, x], dim=1) if cache is not None else x
             if self.cache_drop_size:
-                next_cache = context[:, :-self.cache_drop_size, :]
+                next_cache = full_context[:, :-self.cache_drop_size, :]
             else:
-                next_cache = context[:, -self.max_cache_len:, :]
+                next_cache = full_context[:, -self.max_cache_len:, :]
+
+            # 限制实际用于attention的context长度
+            # att_context_size[1] 控制能看到的左侧历史帧数
+            # 在streaming模式下，限制能看到的历史帧数
+            # 例如：att_context_size=[100, 4] 表示每个位置最多看4帧历史
+            # att_context_size=[100, 49] 表示每个位置最多看49帧历史
+            max_left_context = self.att_context_size[1]
+            max_context_for_attention = max_left_context + input_len
+
+            if full_context.shape[1] > max_context_for_attention:
+                context = full_context[:, -max_context_for_attention:, :]
+            else:
+                context = full_context
         else:
             # 训练模式：使用完整序列
             context = x
@@ -192,7 +208,7 @@ class CausalAttention(nn.Module):
         # q = self.to_q(x)
         q = self.to_q(context)
         k, v = self.to_kv(context).chunk(2, dim=-1)
-        
+
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=h), (q, k, v))
         dots = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
         # 相对位置编码
@@ -202,14 +218,14 @@ class CausalAttention(nn.Module):
         dist = dist.clamp(-self.max_pos_emb, self.max_pos_emb) + self.max_pos_emb
         rel_pos_emb = self.rel_pos_emb(dist)
         pos_attn = einsum('b h n d, n j d -> b h n j', q, rel_pos_emb) * self.scale
-        
+
         dots = dots + pos_attn
 
         # 只在训练模式下应用chunk mask
         # if is_training:
         #     chunk_size = self.att_context_size[1] + 1
         #     left_chunks_num = self.att_context_size[0] // chunk_size if self.att_context_size[0] >= 0 else 0
-            
+
         #     # 创建chunk mask
         #     chunk_idx = torch.arange(0, n, dtype=torch.int, device=device)
         #     chunk_idx = torch.div(chunk_idx, chunk_size, rounding_mode="trunc")
@@ -238,10 +254,10 @@ class CausalAttention(nn.Module):
         out = self.to_out(out)
         out = self.dropout(out)
 
-        # out = out[:,-self.att_context_size[1] - 1:, :]
-        
+        # 在推理模式下，只保留对应于新输入的输出部分，用于残差连接
         if not is_training:
-            out = out[:,-self.att_context_size[1] - 1:, :]
+            # 只保留最后input_len个时间步的输出，与输入x的长度匹配
+            out = out[:, -input_len:, :]
             return out, next_cache
         else:
             return out

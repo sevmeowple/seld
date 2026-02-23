@@ -113,11 +113,7 @@ class ResnetConformer_sed_doa_nopool(nn.Module):
                 else:
                     # 推理模式：默认使用全上下文 (-1)，获得最佳性能
                     # 如果你想在验证时模拟流式模型的固定延迟，这里可以改成 self.att_context_size[1] + 1
-                    active_decoding_chunk_size = -1 
-            else:
-                # 用户强行指定 (比如想测试特定延迟下的性能)
-                active_decoding_chunk_size = decoding_chunk_size
-
+                    active_decoding_chunk_size = self.att_context_size[1] + 1
             # 2. 生成 mask
             masks = torch.ones(N, 1, T, dtype=torch.bool, device=conformer_outputs.device)
             chunk_size = self.att_context_size[1] + 1

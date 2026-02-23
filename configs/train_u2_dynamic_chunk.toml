@@ -1,14 +1,14 @@
-exp_name = "base"
+exp_name = "u2_dynamic_chunk"
 
 [model]
-use_dynamic_chunk = true
-chunk_candidates = [4,9,24,49]
 in_channel = 7
 in_dim = 64
 out_dim = 39
-att_context_size = [100, 4]
+att_context_size = [100, 49]
 num_conformer_layers = 8
 encoder_dim = 256
+use_dynamic_chunk = true
+chunk_candidates = [4, 9, 24, 49]
 pre_train = false
 pre_train_model = "..."
 
@@ -29,10 +29,11 @@ train_num_workers = 8
 test_num_workers = 4
 nb_steps = 60000
 seed = 12332
-debug = false
 
 [result]
 log_output_path = "./logs/train.log"
 log_interval = 100
 checkpoint_output_dir = "./checkpoints"
 dcase_output_dir = "./dcase_output"
+
+debug = false

@@ -1,9 +1,11 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar, Type
 
 import tomli as tomli
 
 from config.schema import Config
+
+T = TypeVar('T')
 
 
 def _find_project_root() -> Path:
@@ -43,15 +45,17 @@ def deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def load_config(
+def load_config_generic(
+    config_class: Type[T],
     base_path: str | Path = "configs/base.toml",
     local_path: str | Path = "configs/local.toml",
     **cli_overrides
-) -> Config:
+) -> T:
+    """Generic config loader that supports any config class"""
     # 1. 解析路径（相对于项目根目录）
     base_path = _resolve_project_path(base_path)
     local_path = _resolve_project_path(local_path)
-    
+
     # 2. 加载基础配置（会自动处理相对路径）
     config_dict = load_toml(base_path)
 
@@ -64,4 +68,13 @@ def load_config(
     config_dict = deep_merge(config_dict, cli_overrides)
 
     # 5. Pydantic 验证
-    return Config(**config_dict)
+    return config_class(**config_dict)
+
+
+def load_config(
+    base_path: str | Path = "configs/base.toml",
+    local_path: str | Path = "configs/local.toml",
+    **cli_overrides
+) -> Config:
+    """Load standard Config"""
+    return load_config_generic(Config, base_path, local_path, **cli_overrides)
