@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from config.config_manager import C, init_config, parse_cli_args
 from seld.lr_scheduler.tri_stage_lr_scheduler import TriStageLRScheduler
 from seld_v2.models.resnet_conformer import ResnetConformer
+from seld_v2.models.resnet_hoom import ResnetHoom
 from seld.utils.process import SetRandomSeed
 
 from seld_v2.data.dataset import LmdbDataset
@@ -14,6 +15,26 @@ from seld_v2.training.train_epoch import train_one_epoch
 from seld_v2.training.eval_epoch import eval_one_epoch, save_and_evaluate
 from seld_v2.training.checkpoint import EarlyStopping, save_checkpoint, load_checkpoint
 from seld_v2.training.experiment import ExperimentDir
+
+
+def build_model(cfg) -> torch.nn.Module:
+    """Factory: build model from config."""
+    if cfg.model.name == "hoom":
+        return ResnetHoom(
+            in_channel=cfg.model.in_channel, in_dim=cfg.model.in_dim,
+            out_dim=cfg.model.out_dim,
+            num_hoom_layers=cfg.model.num_hoom_layers,
+            encoder_dim=cfg.model.encoder_dim,
+            hoom_fusion=cfg.model.hoom_fusion,
+        )
+    return ResnetConformer(
+        in_channel=cfg.model.in_channel, in_dim=cfg.model.in_dim,
+        out_dim=cfg.model.out_dim, att_context_size=cfg.model.att_context_size,
+        num_conformer_layer=cfg.model.num_conformer_layers,
+        encoder_dim=cfg.model.encoder_dim,
+        use_dynamic_chunk=cfg.model.use_dynamic_chunk,
+        chunk_candidates=cfg.model.chunk_candidates,
+    )
 
 
 def main():
@@ -28,14 +49,7 @@ def main():
 
     # 模型 & 损失
     criterion = SedDoaLoss(loss_weight=[0.1, 1])
-    model = ResnetConformer(
-        in_channel=C().model.in_channel, in_dim=C().model.in_dim,
-        out_dim=C().model.out_dim, att_context_size=C().model.att_context_size,
-        num_conformer_layer=C().model.num_conformer_layers,
-        encoder_dim=C().model.encoder_dim,
-        use_dynamic_chunk=C().model.use_dynamic_chunk,
-        chunk_candidates=C().model.chunk_candidates,
-    )
+    model = build_model(C())
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     logger.info(model)
@@ -99,8 +113,9 @@ def main():
 
         # 保存检查点 & 早停
         ckpt_path = save_checkpoint(model, exp.checkpoint_dir, epoch, step_count)
-        is_best = seld_metrics["seld_scr"] < early_stopping.best_score
+        prev_best = early_stopping.best_score
         should_stop = early_stopping.step(seld_metrics["seld_scr"], epoch, ckpt_path)
+        is_best = early_stopping.best_score < prev_best
 
         if is_best:
             exp.log_metrics("train", {

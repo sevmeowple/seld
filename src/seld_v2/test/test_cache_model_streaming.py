@@ -13,10 +13,33 @@ import seld.utils.feature.parameters as parameters
 from config.loader import load_config_generic
 from config.schema import StreamingTestConfigFull
 from seld_v2.models.resnet_conformer import ResnetConformer
+from seld_v2.models.resnet_hoom import ResnetHoom
 from seld_v2.data.process import process_foa_input_sed_doa
 from seld_v2.metrics.result_collector import SedDoaResultCollector
 from seld_v2.training.eval_epoch import save_and_evaluate
 from seld_v2.training.experiment import ExperimentDir
+
+
+def build_model(config: StreamingTestConfigFull) -> torch.nn.Module:
+    """Factory: build model from test config."""
+    if config.model.name == "hoom":
+        if config.streaming.mode == "streaming":
+            raise ValueError("HOOM model does not support streaming mode")
+        return ResnetHoom(
+            in_channel=config.model.in_channel, in_dim=config.model.in_dim,
+            out_dim=config.model.out_dim,
+            num_hoom_layers=config.model.num_hoom_layers,
+            encoder_dim=config.model.encoder_dim,
+            hoom_fusion=config.model.hoom_fusion,
+        )
+    return ResnetConformer(
+        in_channel=config.model.in_channel, in_dim=config.model.in_dim,
+        out_dim=config.model.out_dim, att_context_size=config.model.att_context_size,
+        num_conformer_layer=config.model.num_conformer_layers,
+        encoder_dim=config.model.encoder_dim,
+        use_dynamic_chunk=config.model.use_dynamic_chunk,
+        chunk_candidates=config.model.chunk_candidates,
+    )
 
 
 def set_random_seed(seed):
@@ -69,14 +92,7 @@ def main(config: StreamingTestConfigFull):
     dev_feat_cls = seld.utils.feature.feature.FeatureClassO1(params)
 
     # Initialize model
-    model = ResnetConformer(
-        in_channel=config.model.in_channel, in_dim=config.model.in_dim,
-        out_dim=config.model.out_dim, att_context_size=config.model.att_context_size,
-        num_conformer_layer=config.model.num_conformer_layers,
-        encoder_dim=config.model.encoder_dim,
-        use_dynamic_chunk=config.model.use_dynamic_chunk,
-        chunk_candidates=config.model.chunk_candidates,
-    )
+    model = build_model(config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     logger.info(f"Model: {model}")
@@ -91,6 +107,14 @@ def main(config: StreamingTestConfigFull):
     total_segments = 0
 
     mode = config.streaming.mode
+    overlap_fusion = config.streaming.overlap_fusion
+
+    # Pre-compute frame counts for overlap fusion (offline only)
+    # 10s segment -> 500 STFT frames -> 500 ResNet frames -> 100 output frames (MaxPool1d(5))
+    output_frames_per_sec = 10  # 100 frames / 10s
+    segment_frames = int(segment_length_sec * output_frames_per_sec)
+    hop_frames = int(hop_length_sec * output_frames_per_sec)
+    overlap_frames = segment_frames - hop_frames  # 0 when no overlap
 
     for file in tqdm(os.listdir(wav_path)):
         if torch.cuda.is_available():
@@ -99,7 +123,8 @@ def main(config: StreamingTestConfigFull):
         file_name = os.path.splitext(os.path.basename(file_path))[0]
 
         if mode == "offline":
-            offline_outputs = []
+            result_array = None
+            is_first = True
             for audio_segment, start_time, end_time, is_last_segment in read_wav_in_sliding_windows(
                 file_path, segment_length_sec=segment_length_sec, hop_length_sec=hop_length_sec,
             ):
@@ -113,10 +138,26 @@ def main(config: StreamingTestConfigFull):
                     output = model(data)
                 total_inference_time += time.time() - start_inference
                 total_segments += 1
-                offline_outputs.append(output)
 
-            test_result.add_single(file_name, torch.cat(offline_outputs, dim=1))
-            del offline_outputs
+                if not overlap_fusion or overlap_frames <= 0:
+                    # No overlap: simple concatenation (original behavior)
+                    result_array = output if result_array is None else torch.cat([result_array, output], dim=1)
+                elif is_first:
+                    # First segment: keep first hop_frames + half overlap
+                    keep = hop_frames + overlap_frames // 2
+                    result_array = output[:, :keep, :]
+                    is_first = False
+                elif is_last_segment:
+                    # Last segment: keep from half overlap onward
+                    skip = overlap_frames // 2
+                    result_array = torch.cat([result_array, output[:, skip:, :]], dim=1)
+                else:
+                    # Middle segments: keep middle hop_frames
+                    skip = overlap_frames // 2
+                    result_array = torch.cat([result_array, output[:, skip:skip + hop_frames, :]], dim=1)
+
+            test_result.add_single(file_name, result_array)
+            del result_array
         else:
             resnet_cache = model.get_initial_cache_resnet(batch_size)
             conformer_cache = model.get_initial_cache_conformer(batch_size)

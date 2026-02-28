@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class ModelConfig(BaseModel):
-    name: Literal["resnet", "transformer"] = "resnet"
+    name: Literal["resnet", "transformer", "hoom"] = "resnet"
     in_channel: int = Field(default=256, gt=0)
     in_dim: int = Field(default=256, gt=0)
     out_dim: int = Field(default=256, gt=0)
@@ -19,6 +19,8 @@ class ModelConfig(BaseModel):
     )
     num_conformer_layers: int = Field(default=6, gt=0)
     encoder_dim: int = Field(default=256, gt=0)
+    num_hoom_layers: int = Field(default=8, gt=0)
+    hoom_fusion: Literal["concat", "add"] = "concat"
     pre_train: bool = Field(
         default=False, description="Whether to load pre-trained model"
     )
@@ -73,6 +75,10 @@ class StreamingTestConfig(BaseModel):
     )
     hop_length_sec: float = Field(
         default=1.0, gt=0, description="Hop length in seconds"
+    )
+    overlap_fusion: bool = Field(
+        default=True,
+        description="When hop < segment, crop boundary frames and keep only middle portion for offline",
     )
 
 
