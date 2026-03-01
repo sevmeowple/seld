@@ -51,9 +51,24 @@ class ExperimentDir:
             **{f"cfg_{k}": v for k, v in config.items()},
             **metrics,
         }
-        write_header = not csv_path.exists()
-        with open(csv_path, "a", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=row.keys())
-            if write_header:
-                writer.writeheader()
+
+        # Read existing header and rows if file exists
+        existing_rows: list[dict] = []
+        existing_fields: list[str] = []
+        if csv_path.exists():
+            with open(csv_path, newline="") as f:
+                reader = csv.DictReader(f)
+                existing_fields = reader.fieldnames or []
+                existing_rows = list(reader)
+
+        # Merge fieldnames: preserve existing order, append new columns
+        new_keys = [k for k in row if k not in existing_fields]
+        fieldnames = list(existing_fields) + new_keys
+
+        # Rewrite entire file to ensure header covers all columns
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            for r in existing_rows:
+                writer.writerow(r)
             writer.writerow(row)

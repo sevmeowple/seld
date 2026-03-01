@@ -13,7 +13,7 @@ import seld.utils.feature.parameters as parameters
 from config.loader import load_config_generic
 from config.schema import StreamingTestConfigFull
 from seld_v2.models.resnet_conformer import ResnetConformer
-from seld_v2.models.resnet_hoom import ResnetHoom
+from seld_v2.models.resnet_hoom import HOOM
 from seld_v2.data.process import process_foa_input_sed_doa
 from seld_v2.metrics.result_collector import SedDoaResultCollector
 from seld_v2.training.eval_epoch import save_and_evaluate
@@ -25,12 +25,12 @@ def build_model(config: StreamingTestConfigFull) -> torch.nn.Module:
     if config.model.name == "hoom":
         if config.streaming.mode == "streaming":
             raise ValueError("HOOM model does not support streaming mode")
-        return ResnetHoom(
+        return HOOM(
             in_channel=config.model.in_channel, in_dim=config.model.in_dim,
-            out_dim=config.model.out_dim,
-            num_hoom_layers=config.model.num_hoom_layers,
-            encoder_dim=config.model.encoder_dim,
-            hoom_fusion=config.model.hoom_fusion,
+            out_dim=config.model.out_dim, encoder_dim=config.model.encoder_dim,
+            hoom_layout=config.model.hoom_layout,
+            ccan_channels=config.model.ccan_channels,
+            freq_pool_sizes=config.model.freq_pool_sizes,
         )
     return ResnetConformer(
         in_channel=config.model.in_channel, in_dim=config.model.in_dim,

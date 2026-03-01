@@ -1,4 +1,4 @@
-exp_name = "hoom_fix"
+exp_name = "hoom_wide"
 
 [model]
 name = "hoom"
@@ -7,7 +7,7 @@ in_dim = 64
 out_dim = 39
 att_context_size = [-1, -1]
 num_conformer_layers = 8
-encoder_dim = 256
+encoder_dim = 384
 use_dynamic_chunk = false
 chunk_candidates = []
 hoom_layout = ["ccan", "ccan", "buan", "buan"]

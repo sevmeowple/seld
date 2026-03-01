@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 from config.config_manager import C, init_config, parse_cli_args
 from seld.lr_scheduler.tri_stage_lr_scheduler import TriStageLRScheduler
 from seld_v2.models.resnet_conformer import ResnetConformer
-from seld_v2.models.resnet_hoom import ResnetHoom
+from seld_v2.models.resnet_hoom import HOOM
 from seld.utils.process import SetRandomSeed
 
 from seld_v2.data.dataset import LmdbDataset
@@ -20,12 +20,12 @@ from seld_v2.training.experiment import ExperimentDir
 def build_model(cfg) -> torch.nn.Module:
     """Factory: build model from config."""
     if cfg.model.name == "hoom":
-        return ResnetHoom(
+        return HOOM(
             in_channel=cfg.model.in_channel, in_dim=cfg.model.in_dim,
-            out_dim=cfg.model.out_dim,
-            num_hoom_layers=cfg.model.num_hoom_layers,
-            encoder_dim=cfg.model.encoder_dim,
-            hoom_fusion=cfg.model.hoom_fusion,
+            out_dim=cfg.model.out_dim, encoder_dim=cfg.model.encoder_dim,
+            hoom_layout=cfg.model.hoom_layout,
+            ccan_channels=cfg.model.ccan_channels,
+            freq_pool_sizes=cfg.model.freq_pool_sizes,
         )
     return ResnetConformer(
         in_channel=cfg.model.in_channel, in_dim=cfg.model.in_dim,

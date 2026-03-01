@@ -1,14 +1,20 @@
-exp_name = "u2_dynamic_chunk_test_full_context"
+exp_name = "hoom_deep_ccan_test_offline"
 
 [model]
+name = "hoom"
 in_channel = 7
 in_dim = 64
 out_dim = 39
-att_context_size = [100, -1]
+att_context_size = [-1, -1]
 num_conformer_layers = 8
 encoder_dim = 256
+use_dynamic_chunk = false
+chunk_candidates = []
+hoom_layout = ["ccan", "ccan", "ccan", "buan", "buan"]
+ccan_channels = [64, 128, 256]
+freq_pool_sizes = [2, 2, 2]
 pre_train = true
-pre_train_model = "/disk7/zchan/Proj/SELD/experiments/20260222_213506_u2_dynamic_chunk/checkpoints/checkpoint_epoch166_step45318.pth"
+pre_train_model = "TODO: fill after training"
 
 [data]
 wav_folder_path = "/disk7/zchan/Dataset/Dcase2023/dev/foa_dev_test"
@@ -17,9 +23,7 @@ norm_file = "/disk7/zchan/Dataset/Dcase2023/dev/norm_dir/24h_ACS_foa_wts_fromlmd
 batch_size = 1
 
 [streaming]
-# mode = "streaming"
-mode = "streaming"
+mode = "offline"
 segment_length_sec = 10.0
 hop_length_sec = 10.0
 overlap_fusion = false
-debug = false

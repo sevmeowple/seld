@@ -1,4 +1,4 @@
-exp_name = "hoom_test_offline"
+exp_name = "hoom_fix_test_offline"
 
 [model]
 name = "hoom"
@@ -10,10 +10,11 @@ num_conformer_layers = 8
 encoder_dim = 256
 use_dynamic_chunk = false
 chunk_candidates = []
-num_hoom_layers = 8
-hoom_fusion = "concat"
+hoom_layout = ["ccan", "ccan", "buan", "buan"]
+ccan_channels = [64, 128]
+freq_pool_sizes = [2, 2]
 pre_train = true
-pre_train_model = "experiments/20260227_101233_hoom/checkpoints/checkpoint_epoch82_step22386.pth"
+pre_train_model = "experiments/20260228_105632_hoom_fix/checkpoints/checkpoint_epoch96_step26208.pth"
 
 [data]
 wav_folder_path = "/disk7/zchan/Dataset/Dcase2023/dev/foa_dev_test"

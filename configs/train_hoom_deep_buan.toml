@@ -1,4 +1,4 @@
-exp_name = "hoom_fix"
+exp_name = "hoom_deep_buan"
 
 [model]
 name = "hoom"
@@ -10,7 +10,7 @@ num_conformer_layers = 8
 encoder_dim = 256
 use_dynamic_chunk = false
 chunk_candidates = []
-hoom_layout = ["ccan", "ccan", "buan", "buan"]
+hoom_layout = ["ccan", "ccan", "buan", "buan", "buan", "buan"]
 ccan_channels = [64, 128]
 freq_pool_sizes = [2, 2]
 pre_train = false

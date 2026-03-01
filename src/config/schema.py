@@ -19,8 +19,18 @@ class ModelConfig(BaseModel):
     )
     num_conformer_layers: int = Field(default=6, gt=0)
     encoder_dim: int = Field(default=256, gt=0)
-    num_hoom_layers: int = Field(default=8, gt=0)
-    hoom_fusion: Literal["concat", "add"] = "concat"
+    hoom_layout: List[str] = Field(
+        default=["ccan", "ccan", "buan", "buan"],
+        description="Block layout for HOOM model",
+    )
+    ccan_channels: List[int] = Field(
+        default=[64, 128],
+        description="Output channels for each CCAN block",
+    )
+    freq_pool_sizes: List[int] = Field(
+        default=[2, 2],
+        description="Frequency pooling size after each CCAN block",
+    )
     pre_train: bool = Field(
         default=False, description="Whether to load pre-trained model"
     )
