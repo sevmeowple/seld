@@ -1,0 +1,40 @@
+exp_name = "dhoom"
+
+[model]
+name = "dhoom"
+in_channel = 7
+in_dim = 64
+out_dim = 39
+num_conformer_layers = 4
+encoder_dim = 256
+num_mhsa = 0
+streaming_loss_weight = 1.0
+early_stop_head = "offline"
+pre_train = false
+pre_train_model = "..."
+
+[data]
+train_lmdb_dir = "/disk7/zchan/Dataset/Dcase2023/dev/train_lmdb"
+test_lmdb_dir = "/disk7/zchan/Dataset/Dcase2023/dev/test_lmdb"
+ref_files_dir = "/disk7/zchan/Dataset/Dcase2023/dev/ref_files"
+norm_file = "/disk7/zchan/Dataset/Dcase2023/dev/norm_dir/24h_ACS_foa_wts_fromlmdb"
+segment_len = 100
+select_num = 10
+batch_size = 32
+train_ignore = "enh"
+test_ignore = "enh"
+
+[train]
+lr = 0.001
+train_num_workers = 8
+test_num_workers = 4
+nb_steps = 60000
+seed = 12332
+
+[result]
+log_output_path = "./logs/train.log"
+log_interval = 100
+checkpoint_output_dir = "./checkpoints"
+dcase_output_dir = "./dcase_output"
+
+debug = false

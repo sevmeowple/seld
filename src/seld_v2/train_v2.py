@@ -5,14 +5,16 @@ from config.config_manager import C, init_config, parse_cli_args
 from seld.lr_scheduler.tri_stage_lr_scheduler import TriStageLRScheduler
 from seld_v2.models.resnet_conformer import ResnetConformer
 from seld_v2.models.resnet_hoom import HOOM
+from seld_v2.models.resnet_dhoom import DHOOM
 from seld.utils.process import SetRandomSeed
 
 from seld_v2.data.dataset import LmdbDataset
 from seld_v2.data.process import process_foa_input_sed_doa_labels
 from seld_v2.losses.sed_doa_loss import SedDoaLoss
+from seld_v2.losses.dual_head_loss import DualHeadSedDoaLoss
 from seld_v2.metrics.result_collector import SedDoaResultCollector
 from seld_v2.training.train_epoch import train_one_epoch
-from seld_v2.training.eval_epoch import eval_one_epoch, save_and_evaluate
+from seld_v2.training.eval_epoch import eval_one_epoch, eval_one_epoch_dual_head, save_and_evaluate
 from seld_v2.training.checkpoint import EarlyStopping, save_checkpoint, load_checkpoint
 from seld_v2.training.experiment import ExperimentDir
 
@@ -26,6 +28,13 @@ def build_model(cfg) -> torch.nn.Module:
             hoom_layout=cfg.model.hoom_layout,
             ccan_channels=cfg.model.ccan_channels,
             freq_pool_sizes=cfg.model.freq_pool_sizes,
+        )
+    if cfg.model.name == "dhoom":
+        return DHOOM(
+            in_channel=cfg.model.in_channel, in_dim=cfg.model.in_dim,
+            out_dim=cfg.model.out_dim, encoder_dim=cfg.model.encoder_dim,
+            num_conformer_layers=cfg.model.num_conformer_layers,
+            num_mhsa=cfg.model.num_mhsa,
         )
     return ResnetConformer(
         in_channel=cfg.model.in_channel, in_dim=cfg.model.in_dim,
@@ -48,8 +57,10 @@ def main():
     logger.info("Experiment dir: %s", exp.root)
 
     # 模型 & 损失
-    criterion = SedDoaLoss(loss_weight=[0.1, 1])
+    base_criterion = SedDoaLoss(loss_weight=[0.1, 1])
     model = build_model(C())
+    is_dhoom = C().model.name == "dhoom"
+    criterion = DualHeadSedDoaLoss(base_criterion, C().model.streaming_loss_weight) if is_dhoom else base_criterion
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     logger.info(model)
@@ -96,8 +107,15 @@ def main():
         step_count = train_result["step_count"]
 
         # 验证
-        collector = SedDoaResultCollector(segment_length=C().data.segment_len)
-        eval_result = eval_one_epoch(model, test_loader, criterion, collector, device)
+        if is_dhoom:
+            offline_collector = SedDoaResultCollector(segment_length=C().data.segment_len)
+            streaming_collector = SedDoaResultCollector(segment_length=C().data.segment_len)
+            eval_result = eval_one_epoch_dual_head(
+                model, test_loader, criterion, offline_collector, streaming_collector, device,
+            )
+        else:
+            collector = SedDoaResultCollector(segment_length=C().data.segment_len)
+            eval_result = eval_one_epoch(model, test_loader, criterion, collector, device)
 
         logger.info(
             "epoch: %d, step: %d/%d, train_time:%.2f, test_time:%.2f, "
@@ -108,13 +126,33 @@ def main():
         )
 
         # 评估 SELD 指标
-        output_dir = exp.dcase_output_dir / f"epoch{epoch}_step{step_count}"
-        seld_metrics = save_and_evaluate(eval_result["output_dict"], output_dir, C().data.ref_files_dir)
+        if is_dhoom:
+            output_dir_offline = exp.dcase_output_dir / f"epoch{epoch}_step{step_count}_offline"
+            output_dir_streaming = exp.dcase_output_dir / f"epoch{epoch}_step{step_count}_streaming"
+            offline_metrics = save_and_evaluate(eval_result["offline_output_dict"], output_dir_offline, C().data.ref_files_dir)
+            streaming_metrics = save_and_evaluate(eval_result["streaming_output_dict"], output_dir_streaming, C().data.ref_files_dir)
+            logger.info("Offline  SELD: %.4f | Streaming SELD: %.4f", offline_metrics["seld_scr"], streaming_metrics["seld_scr"])
+
+            # Select score for early stopping
+            head = C().model.early_stop_head
+            if head == "offline":
+                seld_score = offline_metrics["seld_scr"]
+            elif head == "streaming":
+                seld_score = streaming_metrics["seld_scr"]
+            elif head == "average":
+                seld_score = (offline_metrics["seld_scr"] + streaming_metrics["seld_scr"]) / 2
+            else:
+                seld_score = offline_metrics["seld_scr"]
+            seld_metrics = offline_metrics
+        else:
+            output_dir = exp.dcase_output_dir / f"epoch{epoch}_step{step_count}"
+            seld_metrics = save_and_evaluate(eval_result["output_dict"], output_dir, C().data.ref_files_dir)
+            seld_score = seld_metrics["seld_scr"]
 
         # 保存检查点 & 早停
         ckpt_path = save_checkpoint(model, exp.checkpoint_dir, epoch, step_count)
         prev_best = early_stopping.best_score
-        should_stop = early_stopping.step(seld_metrics["seld_scr"], epoch, ckpt_path)
+        should_stop = early_stopping.step(seld_score, epoch, ckpt_path)
         is_best = early_stopping.best_score < prev_best
 
         if is_best:

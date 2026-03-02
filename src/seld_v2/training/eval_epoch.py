@@ -92,3 +92,39 @@ def save_and_evaluate(
         "ER": ER, "F": F, "LE": LE, "LR": LR,
         "seld_scr": seld_scr, "classwise_results": classwise,
     }
+
+
+def eval_one_epoch_dual_head(
+    model: torch.nn.Module,
+    dataloader: DataLoader,
+    criterion: torch.nn.Module,
+    offline_collector: SedDoaResultCollector,
+    streaming_collector: SedDoaResultCollector,
+    device: torch.device,
+) -> Dict:
+    """Eval one epoch for dual-head models (DHOOM).
+
+    Returns:
+        dict with keys: test_loss, offline_output_dict, streaming_output_dict, eval_time
+    """
+    model.eval()
+    losses = []
+    start_time = time.time()
+
+    for data in dataloader:
+        input = data["input"].to(device)
+        target = data["target"].to(device)
+        with torch.no_grad():
+            output = model(input)
+            loss = criterion(output, target)
+            losses.append(loss.item())
+        offline_out, streaming_out = output
+        offline_collector.add_batch(data["wav_names"], offline_out)
+        streaming_collector.add_batch(data["wav_names"], streaming_out)
+
+    return {
+        "test_loss": float(np.mean(losses)) if losses else 0.0,
+        "offline_output_dict": offline_collector.get_result(),
+        "streaming_output_dict": streaming_collector.get_result(),
+        "eval_time": time.time() - start_time,
+    }

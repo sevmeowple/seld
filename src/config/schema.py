@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class ModelConfig(BaseModel):
-    name: Literal["resnet", "transformer", "hoom"] = "resnet"
+    name: Literal["resnet", "transformer", "hoom", "dhoom"] = "resnet"
     in_channel: int = Field(default=256, gt=0)
     in_dim: int = Field(default=256, gt=0)
     out_dim: int = Field(default=256, gt=0)
@@ -30,6 +30,11 @@ class ModelConfig(BaseModel):
     freq_pool_sizes: List[int] = Field(
         default=[2, 2],
         description="Frequency pooling size after each CCAN block",
+    )
+    num_mhsa: int = Field(default=0, description="Number of MHSA layers after conformer (DHOOM)")
+    streaming_loss_weight: float = Field(default=1.0, description="Weight for streaming loss (DHOOM)")
+    early_stop_head: Literal["offline", "streaming", "average", "none"] = Field(
+        default="offline", description="Which head to use for early stopping (DHOOM)",
     )
     pre_train: bool = Field(
         default=False, description="Whether to load pre-trained model"

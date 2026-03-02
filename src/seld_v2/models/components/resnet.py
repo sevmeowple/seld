@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import Optional, Tuple, List
 
 import torch
@@ -16,6 +17,7 @@ class CausalConv2D(nn.Module):
         padding = (0, kernel_size // 2)
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
         self.cache_len = kernel_size - 1
+        self._causal = True
 
     @property
     def weight(self) -> torch.Tensor:
@@ -25,7 +27,13 @@ class CausalConv2D(nn.Module):
         self, x: torch.Tensor, cache: Optional[torch.Tensor] = None,
     ) -> torch.Tensor | Tuple[torch.Tensor, torch.Tensor]:
         if cache is None:
-            x = F.pad(x, (0, 0, self.cache_len, 0))
+            if self._causal:
+                x = F.pad(x, (0, 0, self.cache_len, 0))
+            else:
+                # symmetric padding for non-causal mode
+                pad_top = self.cache_len // 2
+                pad_bot = self.cache_len - pad_top
+                x = F.pad(x, (0, 0, pad_top, pad_bot))
         else:
             x = torch.cat([cache, x], dim=2)
 
@@ -109,6 +117,18 @@ class BasicBlock(nn.Module):
 
 
 class ResNet_nopool(nn.Module):
+    @contextmanager
+    def noncausal_mode(self):
+        """Temporarily set all CausalConv2D modules to symmetric (non-causal) padding."""
+        causal_convs = [m for m in self.modules() if isinstance(m, CausalConv2D)]
+        for m in causal_convs:
+            m._causal = False
+        try:
+            yield
+        finally:
+            for m in causal_convs:
+                m._causal = True
+
     def __init__(self, block: type[BasicBlock], layers: List[int], in_channel: int = 17,
                  zero_init_residual: bool = False):
         super().__init__()
