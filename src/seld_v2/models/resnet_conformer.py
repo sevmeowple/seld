@@ -33,6 +33,7 @@ class ResnetConformer(nn.Module):
         num_classes: int = 13,
         use_dynamic_chunk: bool = True,
         chunk_candidates: Optional[List[int]] = None,
+        sample_chunks_from_candidates: bool = False,
     ):
         super().__init__()
         self.resnet = resnet18_nopool(in_channel=in_channel)
@@ -44,6 +45,7 @@ class ResnetConformer(nn.Module):
         self.cache_past_len = att_context_size[0]
         self.use_dynamic_chunk = use_dynamic_chunk
         self.chunk_candidates = chunk_candidates
+        self.sample_chunks_from_candidates = sample_chunks_from_candidates
 
         self.input_projection = nn.Sequential(
             nn.Linear(embedding_dim, encoder_dim),
@@ -119,6 +121,7 @@ class ResnetConformer(nn.Module):
                 decoding_chunk_size=active_chunk,
                 static_chunk_size=max(chunk_size, 0), num_decoding_left_chunks=num_left,
                 chunk_candidates=self.chunk_candidates,
+                sample_from_candidates=self.sample_chunks_from_candidates,
             )
         if chunk_mask is not None:
             chunk_mask = chunk_mask.unsqueeze(1)

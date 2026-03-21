@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import csv
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
+
+import numpy as np
+import tomli
+import tomli_w
 
 
 class ExperimentDir:
@@ -41,34 +43,103 @@ class ExperimentDir:
         )
         return logging.getLogger(__name__)
 
-    def log_metrics(self, phase: str, config: dict, metrics: dict) -> None:
-        """Append one row to experiments/metrics.csv with config + metrics."""
-        csv_path = self.root.parent / "metrics.csv"
-        row = {
+    def log_metrics(
+        self, phase: str, config: dict, metrics: dict, split_result: bool = True
+    ) -> None:
+        """Append or update an entry in experiments/metrics.toml.
+
+        For train phase, replaces existing entry with same exp_name
+        (keeps only the best). For test phase, always appends.
+
+        Args:
+            phase: "train" or "test"
+            config: Configuration dictionary
+            metrics: Metrics dictionary
+            split_result: If True, also save to experiments/result/YYYYWxx/{exp_name}.toml
+        """
+        toml_path = self.root.parent / "metrics.toml"
+
+        # Build classwise sub-dict from numpy array (5, N_classes)
+        classwise_raw = metrics.get("classwise_results")
+        classwise = {}
+        if classwise_raw is not None:
+            names = ["ER", "F", "LE", "LR", "seld_scr"]
+            arr = np.asarray(classwise_raw)
+            for i, name in enumerate(names):
+                classwise[name] = arr[i].tolist()
+
+        entry = {
             "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
             "exp_name": self.root.name,
             "phase": phase,
-            **{f"cfg_{k}": v for k, v in config.items()},
-            **metrics,
+            "config": {k: _toml_safe(v) for k, v in config.items()},
+            "metrics": {
+                k: round(v, 6) if isinstance(v, float) else v
+                for k, v in metrics.items() if k != "classwise_results"
+            },
         }
+        if classwise:
+            entry["classwise"] = classwise
 
-        # Read existing header and rows if file exists
-        existing_rows: list[dict] = []
-        existing_fields: list[str] = []
-        if csv_path.exists():
-            with open(csv_path, newline="") as f:
-                reader = csv.DictReader(f)
-                existing_fields = reader.fieldnames or []
-                existing_rows = list(reader)
+        # Load existing
+        data: dict = {"experiments": []}
+        if toml_path.exists():
+            with open(toml_path, "rb") as f:
+                data = tomli.load(f)
 
-        # Merge fieldnames: preserve existing order, append new columns
-        new_keys = [k for k in row if k not in existing_fields]
-        fieldnames = list(existing_fields) + new_keys
+        # For train: replace previous entry with same exp_name
+        if phase == "train":
+            data["experiments"] = [
+                e for e in data["experiments"]
+                if not (e.get("exp_name") == entry["exp_name"] and e.get("phase") == "train")
+            ]
 
-        # Rewrite entire file to ensure header covers all columns
-        with open(csv_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-            writer.writeheader()
-            for r in existing_rows:
-                writer.writerow(r)
-            writer.writerow(row)
+        data["experiments"].append(entry)
+
+        with open(toml_path, "wb") as f:
+            tomli_w.dump(data, f)
+
+        # Also save to split result directory if enabled
+        if split_result:
+            self._save_split_result(entry)
+
+    def _get_week_folder(self, exp_name: str) -> str:
+        """Extract week folder name from exp_name, e.g., 2026W08.
+
+        Args:
+            exp_name: Experiment name starting with YYYYMMDD
+
+        Returns:
+            Week folder string in format YYYYWxx
+        """
+        date_str = exp_name[:8]  # First 8 chars are YYYYMMDD
+        dt = datetime.strptime(date_str, "%Y%m%d")
+        iso = dt.isocalendar()
+        return f"{iso.year}W{iso.week:02d}"
+
+    def _save_split_result(self, entry: dict) -> None:
+        """Save entry to experiments/result/YYYYWxx/{exp_name}.toml.
+
+        Args:
+            entry: The experiment entry to save
+        """
+        week_folder = self._get_week_folder(self.root.name)
+        result_dir = self.root.parent / "result" / week_folder
+        result_dir.mkdir(parents=True, exist_ok=True)
+
+        single_file = result_dir / f"{self.root.name}.toml"
+        with open(single_file, "wb") as f:
+            tomli_w.dump(entry, f)
+
+
+def _toml_safe(v):
+    """Convert value to TOML-compatible type."""
+    if isinstance(v, (list, tuple)):
+        return [_toml_safe(x) for x in v]
+    if isinstance(v, np.integer):
+        return int(v)
+    if isinstance(v, np.floating):
+        return float(v)
+    if isinstance(v, np.ndarray):
+        return v.tolist()
+    return v

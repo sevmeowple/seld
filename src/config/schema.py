@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class ModelConfig(BaseModel):
-    name: Literal["resnet", "transformer", "hoom", "dhoom"] = "resnet"
+    name: Literal["resnet", "transformer", "hoom", "dhoom", "resnet_conformer_dhoom"] = "resnet"
     in_channel: int = Field(default=256, gt=0)
     in_dim: int = Field(default=256, gt=0)
     out_dim: int = Field(default=256, gt=0)
@@ -16,6 +16,11 @@ class ModelConfig(BaseModel):
     chunk_candidates: List[int] = Field(
         default=[4, 9, 24, 49],
         description="Candidate chunk sizes for dynamic chunk training",
+    )
+    sample_chunks_from_candidates: bool = Field(
+        default=False,
+        description="If True, sample directly from chunk_candidates list; "
+        "If False, use U2-style: 50%% full context, 50%% uniform [1, max(chunk_candidates)]",
     )
     num_conformer_layers: int = Field(default=6, gt=0)
     encoder_dim: int = Field(default=256, gt=0)
@@ -67,6 +72,19 @@ class TrainConfig(BaseModel):
     test_num_workers: int = Field(default=4, gt=0)
     nb_steps: int = Field(default=1000, gt=0)
     seed: int = 42
+    scheduler: Literal["tristage", "warmup"] = Field(
+        default="tristage",
+        description="Learning rate scheduler type: tristage (SpecAugment style) or warmup (WeNet U2 style)",
+    )
+    warmup_steps: int = Field(
+        default=25000, gt=0,
+        description="Number of warmup steps for warmup scheduler (ignored for tristage)",
+    )
+    # TriStage scheduler parameters (ignored when using warmup scheduler)
+    init_lr_scale: float = Field(default=0.01, description="Initial LR as fraction of peak LR (tristage only)")
+    final_lr_scale: float = Field(default=0.05, description="Final LR as fraction of peak LR (tristage only)")
+    warmup_ratio: float = Field(default=0.1, description="Fraction of steps for warmup (tristage only)")
+    hold_ratio: float = Field(default=0.6, description="Fraction of steps for hold (tristage only)")
 
 
 class ResultConfig(BaseModel):
@@ -79,8 +97,8 @@ class ResultConfig(BaseModel):
 class StreamingTestConfig(BaseModel):
     """Configuration for streaming performance tests"""
 
-    mode: Literal["streaming", "offline"] = Field(
-        default="streaming", description="Test mode: streaming or offline"
+    mode: Literal["offline", "streaming", "streaming_chunk_mask", "streaming_cache"] = Field(
+        default="streaming", description="Test mode: offline, streaming (alias for chunk_mask), streaming_chunk_mask (chunk-based attention), or streaming_cache (true streaming with cache)"
     )
     latency_ms: int = Field(
         default=0, ge=0, description="Simulated latency in milliseconds"

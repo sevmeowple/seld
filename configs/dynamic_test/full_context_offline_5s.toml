@@ -1,0 +1,24 @@
+exp_name = "u2_dynamic_chunk_test_full_context_offline_5s"
+
+[model]
+in_channel = 7
+in_dim = 64
+out_dim = 39
+att_context_size = [100, -1]
+num_conformer_layers = 8
+encoder_dim = 256
+pre_train = true
+pre_train_model = "/disk7/zchan/Proj/SELD/experiments/20260222_213506_u2_dynamic_chunk/checkpoints/checkpoint_epoch166_step45318.pth"
+
+[data]
+wav_folder_path = "/disk7/zchan/Dataset/Dcase2023/dev/foa_dev_test"
+ref_files_dir = "/disk7/zchan/Dataset/Dcase2023/dev/ref_files"
+norm_file = "/disk7/zchan/Dataset/Dcase2023/dev/norm_dir/24h_ACS_foa_wts_fromlmdb"
+batch_size = 1
+
+[streaming]
+mode = "offline"
+segment_length_sec = 5.0
+hop_length_sec = 5.0
+overlap_fusion = false
+debug = false

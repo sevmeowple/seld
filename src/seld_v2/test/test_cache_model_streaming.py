@@ -14,6 +14,7 @@ from config.loader import load_config_generic
 from config.schema import StreamingTestConfigFull
 from seld_v2.models.resnet_conformer import ResnetConformer
 from seld_v2.models.resnet_hoom import HOOM
+from seld_v2.models.resnet_conformer_dhoom import ResNetConformerDHOOM
 from seld_v2.data.process import process_foa_input_sed_doa
 from seld_v2.metrics.result_collector import SedDoaResultCollector
 from seld_v2.training.eval_epoch import save_and_evaluate
@@ -32,6 +33,17 @@ def build_model(config: StreamingTestConfigFull) -> torch.nn.Module:
             ccan_channels=config.model.ccan_channels,
             freq_pool_sizes=config.model.freq_pool_sizes,
         )
+    if config.model.name == "resnet_conformer_dhoom":
+        return ResNetConformerDHOOM(
+            in_channel=config.model.in_channel, in_dim=config.model.in_dim,
+            out_dim=config.model.out_dim, encoder_dim=config.model.encoder_dim,
+            num_conformer_layers=config.model.num_conformer_layers,
+            num_mhsa=config.model.num_mhsa,
+            att_context_size=config.model.att_context_size,
+            use_dynamic_chunk=config.model.use_dynamic_chunk,
+            chunk_candidates=config.model.chunk_candidates,
+            sample_chunks_from_candidates=config.model.sample_chunks_from_candidates,
+        )
     return ResnetConformer(
         in_channel=config.model.in_channel, in_dim=config.model.in_dim,
         out_dim=config.model.out_dim, att_context_size=config.model.att_context_size,
@@ -39,6 +51,7 @@ def build_model(config: StreamingTestConfigFull) -> torch.nn.Module:
         encoder_dim=config.model.encoder_dim,
         use_dynamic_chunk=config.model.use_dynamic_chunk,
         chunk_candidates=config.model.chunk_candidates,
+        sample_chunks_from_candidates=config.model.sample_chunks_from_candidates,
     )
 
 
@@ -135,7 +148,12 @@ def main(config: StreamingTestConfigFull):
 
                 start_inference = time.time()
                 with torch.no_grad():
-                    output = model(data)
+                    model_output = model(data)
+                    # Handle dual-head models (resnet_conformer_dhoom returns tuple)
+                    if isinstance(model_output, tuple):
+                        output = model_output[0]  # Use offline output for evaluation
+                    else:
+                        output = model_output
                 total_inference_time += time.time() - start_inference
                 total_segments += 1
 

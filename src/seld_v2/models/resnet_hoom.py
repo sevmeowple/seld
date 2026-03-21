@@ -40,8 +40,8 @@ class HOOM(nn.Module):
         self.freq_pools = nn.ModuleList()
         prev_ch = in_channel
         freq_dim = in_dim
-        for ch, pool_sz in zip(ccan_channels, freq_pool_sizes):
-            self.ccan_blocks.append(CCANBlock(prev_ch, ch, dropout=dropout))
+        for i, (ch, pool_sz) in enumerate(zip(ccan_channels, freq_pool_sizes)):
+            self.ccan_blocks.append(CCANBlock(prev_ch, ch, dropout=dropout, is_first=(i == 0)))
             self.freq_pools.append(nn.MaxPool2d((1, pool_sz)))
             prev_ch = ch
             freq_dim = freq_dim // pool_sz
@@ -52,7 +52,7 @@ class HOOM(nn.Module):
         # Build BUAN blocks
         buan_layers = [l for l in hoom_layout if l == "buan"]
         self.buan_blocks = nn.ModuleList([
-            BUANBlock(encoder_dim, dropout=dropout) for _ in buan_layers
+            BUANBlock(encoder_dim, dropout=dropout, is_first=(i == 0)) for i, _ in enumerate(buan_layers)
         ])
 
         # 3 × MHSA + LayerNorm

@@ -1,0 +1,25 @@
+exp_name = "u2_dynamic_chunk_test_chunk_4_fast"
+
+[model]
+in_channel = 7
+in_dim = 64
+out_dim = 39
+att_context_size = [100, 4]
+num_conformer_layers = 8
+encoder_dim = 256
+pre_train = true
+pre_train_model = "experiments/20260317_145659_u2_dynamic_chunk/checkpoints/checkpoint_epoch56_step15288.pth"
+
+[data]
+# 临时只测10个文件
+wav_folder_path = "/disk7/zchan/Dataset/Dcase2023/dev/foa_dev_test_subset"
+ref_files_dir = "/disk7/zchan/Dataset/Dcase2023/dev/ref_files"
+norm_file = "/disk7/zchan/Dataset/Dcase2023/dev/norm_dir/24h_ACS_foa_wts_fromlmdb"
+batch_size = 1
+
+[streaming]
+mode = "streaming"
+segment_length_sec = 0.1
+hop_length_sec = 0.1
+
+debug = false

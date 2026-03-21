@@ -1,0 +1,46 @@
+# ResNet-Conformer-DHOOM Dynamic Chunk 训练配置
+# 不限制 candidate，使用 U2 默认随机采样策略 (从 [1, max_len) 采样)
+
+exp_name = "resnet_conformer_dhoom_dynamic_chunk"
+
+[model]
+name = "resnet_conformer_dhoom"
+in_channel = 7
+in_dim = 64
+out_dim = 39
+att_context_size = [100, 49]       # 最大 chunk_size = 50，但 training 时会随机变化
+use_dynamic_chunk = true           # 启用 dynamic chunk
+# chunk_candidates 不设置，使用默认随机采样 (从 [1, max_len) 采样)
+num_conformer_layers = 8
+encoder_dim = 256
+num_mhsa = 0
+streaming_loss_weight = 1.0
+early_stop_head = "average"        # 使用 average 更公平
+pre_train = false
+pre_train_model = ""
+
+[data]
+train_lmdb_dir = "/disk7/zchan/Dataset/Dcase2023/dev/train_lmdb"
+test_lmdb_dir = "/disk7/zchan/Dataset/Dcase2023/dev/test_lmdb"
+ref_files_dir = "/disk7/zchan/Dataset/Dcase2023/dev/ref_files"
+norm_file = "/disk7/zchan/Dataset/Dcase2023/dev/norm_dir/24h_ACS_foa_wts_fromlmdb"
+segment_len = 100
+select_num = 1000
+batch_size = 16
+train_ignore = "enh"
+test_ignore = "enh"
+
+[train]
+lr = 0.001
+train_num_workers = 4
+test_num_workers = 4
+nb_steps = 50000
+seed = 42
+
+[result]
+log_output_path = "experiments/resnet_conformer_dhoom_dynamic_chunk/logs/train.log"
+log_interval = 100
+checkpoint_output_dir = "experiments/resnet_conformer_dhoom_dynamic_chunk/checkpoints"
+dcase_output_dir = "experiments/resnet_conformer_dhoom_dynamic_chunk/dcase_output"
+
+debug = false

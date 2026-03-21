@@ -40,11 +40,7 @@ class CausalAttention(nn.Module):
         if cache is not None:
             full_context = torch.cat([cache, x], dim=1)
             next_cache = full_context[:, -self.max_cache_len:, :]
-            if self.att_context_size[1] >= 0:
-                max_context = self.att_context_size[1] + input_len
-                context = full_context[:, -max_context:, :] if full_context.shape[1] > max_context else full_context
-            else:
-                context = full_context
+            context = full_context
         else:
             context = x
 
@@ -65,6 +61,15 @@ class CausalAttention(nn.Module):
         rel_pos_emb = self.rel_pos_emb(dist)
         pos_attn = einsum('b h n d, n j d -> b h n j', q, rel_pos_emb) * self.scale
         dots = dots + pos_attn
+
+        # Apply chunk-based causal mask for streaming
+        if cache is not None and self.att_context_size[1] >= 0:
+            chunk_size = self.att_context_size[1] + 1
+            q_pos = torch.arange(input_len, device=device) + (context_len - input_len)
+            k_pos = torch.arange(context_len, device=device)
+            dist = q_pos[:, None] - k_pos[None, :]
+            chunk_mask = (dist >= 0) & (dist <= chunk_size - 1)
+            dots = dots.masked_fill(~chunk_mask, float('-inf'))
 
         if mask is not None:
             dots.masked_fill_(~mask, float('-inf'))
@@ -108,7 +113,7 @@ class ConformerConvModule(nn.Module):
         self.depth_conv = DepthWiseConv1dWithCache(
             inner_dim, inner_dim, kernel_size=kernel_size, padding=padding,
         )
-        self.bn = nn.BatchNorm1d(inner_dim)
+        self.norm = nn.LayerNorm(inner_dim)
         self.swish = Swish()
         self.conv2 = nn.Conv1d(inner_dim, dim, 1)
         self.dropout = nn.Dropout(dropout)
@@ -123,7 +128,10 @@ class ConformerConvModule(nn.Module):
             x = self.depth_conv(x)
         else:
             x, next_cache = self.depth_conv(x, cache)
-        x = self.bn(x)
+        # LayerNorm: transpose to (B, T, C), apply norm, transpose back to (B, C, T)
+        x = rearrange(x, 'b c n -> b n c')
+        x = self.norm(x)
+        x = rearrange(x, 'b n c -> b c n')
         x = self.swish(x)
         x = self.conv2(x)
         x = rearrange(x, 'b c n -> b n c')

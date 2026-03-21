@@ -51,6 +51,7 @@ def add_optional_chunk_mask(
     num_decoding_left_chunks: int,
     enable_full_context: bool = True,
     chunk_candidates: list[int] | None = None,
+    sample_from_candidates: bool = False,
 ) -> torch.Tensor:
     """Apply optional mask for encoder.
 
@@ -80,6 +81,8 @@ def add_optional_chunk_mask(
             False: always dynamic chunk
         chunk_candidates (list[int] | None): candidate chunk sizes for
             dynamic chunk training. If None, sample from [1, max_len).
+        sample_from_candidates (bool): If True, sample directly from chunk_candidates
+            list. If False (U2-style), ~50% full context, ~50% uniform [1, max_chunk].
 
     Returns:
         torch.Tensor: chunk mask of the input xs.
@@ -100,10 +103,14 @@ def add_optional_chunk_mask(
                 chunk_size = max_len
             else:
                 if chunk_candidates:
-                    max_chunk = max(chunk_candidates)
+                    if sample_from_candidates:
+                        chunk_size = random.choice(chunk_candidates)
+                    else:
+                        max_chunk = max(chunk_candidates)
+                        chunk_size = chunk_size % max_chunk + 1
                 else:
                     max_chunk = 25
-                chunk_size = chunk_size % max_chunk + 1
+                    chunk_size = chunk_size % max_chunk + 1
                 if use_dynamic_left_chunk:
                     max_left_chunks = (max_len - 1) // chunk_size
                     num_left_chunks = int(torch.randint(

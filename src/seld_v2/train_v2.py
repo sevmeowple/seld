@@ -3,9 +3,11 @@ from torch.utils.data import DataLoader
 
 from config.config_manager import C, init_config, parse_cli_args
 from seld.lr_scheduler.tri_stage_lr_scheduler import TriStageLRScheduler
+from seld_v2.training.wenet_scheduler import WarmupLR
 from seld_v2.models.resnet_conformer import ResnetConformer
 from seld_v2.models.resnet_hoom import HOOM
 from seld_v2.models.resnet_dhoom import DHOOM
+from seld_v2.models.resnet_conformer_dhoom import ResNetConformerDHOOM
 from seld.utils.process import SetRandomSeed
 
 from seld_v2.data.dataset import LmdbDataset
@@ -36,6 +38,17 @@ def build_model(cfg) -> torch.nn.Module:
             num_conformer_layers=cfg.model.num_conformer_layers,
             num_mhsa=cfg.model.num_mhsa,
         )
+    if cfg.model.name == "resnet_conformer_dhoom":
+        return ResNetConformerDHOOM(
+            in_channel=cfg.model.in_channel, in_dim=cfg.model.in_dim,
+            out_dim=cfg.model.out_dim, encoder_dim=cfg.model.encoder_dim,
+            num_conformer_layers=cfg.model.num_conformer_layers,
+            num_mhsa=cfg.model.num_mhsa,
+            att_context_size=cfg.model.att_context_size,
+            use_dynamic_chunk=cfg.model.use_dynamic_chunk,
+            chunk_candidates=cfg.model.chunk_candidates,
+            sample_chunks_from_candidates=cfg.model.sample_chunks_from_candidates,
+        )
     return ResnetConformer(
         in_channel=cfg.model.in_channel, in_dim=cfg.model.in_dim,
         out_dim=cfg.model.out_dim, att_context_size=cfg.model.att_context_size,
@@ -43,6 +56,7 @@ def build_model(cfg) -> torch.nn.Module:
         encoder_dim=cfg.model.encoder_dim,
         use_dynamic_chunk=cfg.model.use_dynamic_chunk,
         chunk_candidates=cfg.model.chunk_candidates,
+        sample_chunks_from_candidates=cfg.model.sample_chunks_from_candidates,
     )
 
 
@@ -59,7 +73,7 @@ def main():
     # 模型 & 损失
     base_criterion = SedDoaLoss(loss_weight=[0.1, 1])
     model = build_model(C())
-    is_dhoom = C().model.name == "dhoom"
+    is_dhoom = C().model.name in ["dhoom", "resnet_conformer_dhoom"]
     criterion = DualHeadSedDoaLoss(base_criterion, C().model.streaming_loss_weight) if is_dhoom else base_criterion
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -87,12 +101,22 @@ def main():
     # 优化器 & 调度器
     optimizer = torch.optim.Adam(model.parameters(), lr=C().train.lr)
     total_steps = C().train.nb_steps
-    scheduler = TriStageLRScheduler(
-        optimizer, peak_lr=C().train.lr, init_lr_scale=0.01, final_lr_scale=0.05,
-        warmup_steps=int(total_steps * 0.1),
-        hold_steps=int(total_steps * 0.6),
-        decay_steps=int(total_steps * 0.3),
-    )
+
+    # 根据配置选择 scheduler
+    if C().train.scheduler == "warmup":
+        # WeNet U2 style: warmup + polynomial decay
+        scheduler = WarmupLR(optimizer, warmup_steps=C().train.warmup_steps)
+    else:
+        # TriStage (SpecAugment style): warmup + hold + exponential decay
+        scheduler = TriStageLRScheduler(
+            optimizer,
+            peak_lr=C().train.lr,
+            init_lr_scale=C().train.init_lr_scale,
+            final_lr_scale=C().train.final_lr_scale,
+            warmup_steps=int(total_steps * C().train.warmup_ratio),
+            hold_steps=int(total_steps * C().train.hold_ratio),
+            decay_steps=int(total_steps * (1 - C().train.warmup_ratio - C().train.hold_ratio)),
+        )
 
     # 训练循环
     step_count = 0

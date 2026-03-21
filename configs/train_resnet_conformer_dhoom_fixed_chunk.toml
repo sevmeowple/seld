@@ -1,0 +1,45 @@
+# ResNet-Conformer-DHOOM 固定 Chunk 训练配置
+# 使用 att_context_size = [100, 4] -> chunk_size = 5，不启用 dynamic chunk
+
+exp_name = "resnet_conformer_dhoom_fixed_chunk_5"
+
+[model]
+name = "resnet_conformer_dhoom"
+in_channel = 7
+in_dim = 64
+out_dim = 39
+att_context_size = [100, 4]        # chunk_size = 4 + 1 = 5
+use_dynamic_chunk = false          # 禁用 dynamic chunk，使用固定 chunk
+num_conformer_layers = 8
+encoder_dim = 256
+num_mhsa = 0
+streaming_loss_weight = 1.0
+early_stop_head = "average"        # 使用 average 更公平
+pre_train = false
+pre_train_model = ""
+
+[data]
+train_lmdb_dir = "/disk7/zchan/Dataset/Dcase2023/dev/train_lmdb"
+test_lmdb_dir = "/disk7/zchan/Dataset/Dcase2023/dev/test_lmdb"
+ref_files_dir = "/disk7/zchan/Dataset/Dcase2023/dev/ref_files"
+norm_file = "/disk7/zchan/Dataset/Dcase2023/dev/norm_dir/24h_ACS_foa_wts_fromlmdb"
+segment_len = 100
+select_num = 1000
+batch_size = 16
+train_ignore = "enh"
+test_ignore = "enh"
+
+[train]
+lr = 0.001
+train_num_workers = 4
+test_num_workers = 4
+nb_steps = 50000
+seed = 42
+
+[result]
+log_output_path = "experiments/resnet_conformer_dhoom_fixed_chunk_5/logs/train.log"
+log_interval = 100
+checkpoint_output_dir = "experiments/resnet_conformer_dhoom_fixed_chunk_5/checkpoints"
+dcase_output_dir = "experiments/resnet_conformer_dhoom_fixed_chunk_5/dcase_output"
+
+debug = false

@@ -6,7 +6,7 @@ chunk_candidates = [4,9,24,49]
 in_channel = 7
 in_dim = 64
 out_dim = 39
-att_context_size = [100, 4]
+att_context_size = [100, 49]
 num_conformer_layers = 8
 encoder_dim = 256
 pre_train = false
@@ -29,6 +29,15 @@ train_num_workers = 8
 test_num_workers = 4
 nb_steps = 60000
 seed = 12332
+# scheduler type: "warmup" (WeNet U2 style) or "tristage" (SpecAugment style)
+scheduler = "warmup"
+warmup_steps = 15000
+# tristage parameters (only used when scheduler = "tristage")
+# init_lr_scale = 0.01
+# final_lr_scale = 0.05
+# warmup_ratio = 0.1
+# hold_ratio = 0.6
+
 debug = false
 
 [result]

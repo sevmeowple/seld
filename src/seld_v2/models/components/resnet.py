@@ -71,7 +71,7 @@ class BasicBlock(nn.Module):
         self.planes = planes
         self.conv1 = conv3x3(inplanes, planes, stride)
         self.ln1 = nn.LayerNorm(_ln_size(planes))
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
         self.conv2 = conv3x3(planes, planes)
         self.ln2 = nn.LayerNorm(_ln_size(planes))
         self.downsample = downsample
@@ -135,7 +135,7 @@ class ResNet_nopool(nn.Module):
         self.inplanes = 24
         self.conv1 = CausalConv2D(in_channel, 24, kernel_size=3, stride=1, bias=False)
         self.ln1 = nn.LayerNorm(64 * 24)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
         self.layer1 = self._make_layer(block, 24, layers[0])
         self.maxpool1 = nn.MaxPool2d(kernel_size=(1, 4))
         self.layer2 = self._make_layer(block, 48, layers[1])
